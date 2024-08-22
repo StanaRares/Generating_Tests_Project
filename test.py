@@ -1,58 +1,80 @@
-import streamlit as st
-import fitz  # PyMuPDF
-import streamlit as st
-from langchain.chat_models import ChatOpenAI
-from langchain.chains import create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.document_loaders import PyPDFLoader
-from langchain.vectorstores import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_chroma import Chroma
+from langchain.chains import create_retrieval_chain
 from langchain.embeddings import HuggingFaceEmbeddings
 
-import PyPDF2
-import time
-from docx import Document
-import docx
+from langchain.chat_models import ChatOpenAI
+from langchain.chains.conversation.memory import ConversationBufferMemory
+from langchain.chains import LLMChain
+from langchain.prompts.chat import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 
-# Streamlit interface
-st.title('PDF-based Question Answering Chatbot')
+def initialize_retriever():
+    
+    #document loading
+    loader = PyPDFLoader("AN IV_Cap 1_Sangerari_txt.pdf")
+    documents = loader.load()
+    
+    #text splitting
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    splits = text_splitter.split_documents(documents)
+    
+    #embedding
+    emb = HuggingFaceEmbeddings()
+    vectorstore = Chroma.from_documents(documents=splits, embedding=emb)
+    
+    #emb=OpenAIEmbeddings()
+    #vectorstore = Chroma.from_documents(documents=splits, embedding=emb)
 
-# Initialize ChatOpenAI with your OpenAI API key
-llm = ChatOpenAI(
-    model="meta-llama/Meta-Llama-3-70B-Instruct",
-    openai_api_key="EMPTY",  # Replace with your actual OpenAI API key
-    openai_api_base="https://api.openai.com/v1",
-    temperature=1
-)
+    # Retrieve and generate using the relevant snippets of the document.
+    retriever = vectorstore.as_retriever()
+    return retriever
 
-# File uploader
-uploaded_file = st.file_uploader("Upload a PDF file", type="pdf")
-if uploaded_file:
-        if uploaded_file.type == "application/pdf":
-            with open(uploaded_file.name, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            loader = PyPDFLoader(uploaded_file.name)
-            docs = loader.load()
-        else:
-            st.warning("Currently, only PDF files are supported.")
+def get_chatbot():
+    llm = ChatOpenAI(
+        model="meta-llama/Meta-Llama-3-70B-Instruct",
+        openai_api_key="EMPTY",
+        openai_api_base="http://localhost:8000/v1",
+        temperature=0,
+    )
+    
+    
+    conversational_memory=ConversationBufferMemory(memory_key="chat_history",return_messages=True,input_key="input")
+    
+    
+    system_message_template='''
+    You are a helpful assistant. Your task is to help the user.
+    Use the following pieces of retrieved context to answer questions:
+    {context}
+    
+    {chat_history}
+    '''
+    
+    system_message_prompt = SystemMessagePromptTemplate.from_template(system_message_template)
+    human_template="{input}"
+    human_message_prompt = HumanMessagePromptTemplate.from_template(human_template)
+    llmchain = LLMChain(llm=llm, prompt=ChatPromptTemplate.from_messages([system_message_prompt,human_message_prompt]), memory = conversational_memory)
+    
+    
+    retriever = initialize_retriever()
+    
+    return create_retrieval_chain(retriever, llmchain)
 
-        st.session_state.uploaded_files = docs
 
-# Question box
-question = st.text_input("Ask a question based on the uploaded PDF:")
-if question:
-    if 'pdf_text' in st.session_state:
-        # Use LangChain to answer the question based on the PDF text
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-        splits = text_splitter.split_documents(st.session_state.uploaded_files)
+agent=get_chatbot()
 
-        vectorstore = Chroma.from_documents(documents=splits, embedding=HuggingFaceEmbeddings())
-        retriever = vectorstore.as_retriever()
-
-        rag_chain = create_retrieval_chain(retriever, question)
-        results = rag_chain.invoke({"input": "Generate the quiz"})
-        final_quiz = results['answer']
-        st.write(final_quiz)
-    else:
-        st.warning("Please upload a PDF file first.")
+while True:
+    query = input(">> ")
+    #Ask me a question about GAN, tell me the answer right after
+    rep=agent.invoke({"input": query})
+    question_anwer=rep['answer']['text']
+    print(rep['answer']['text'])
+    print()
+    #print(rep['context'])
+    #print(rep['context'][0].metadata['page'])
+    
+    
+    rep_2=agent.invoke({"input": 'Quote me the context that gives the answer to this questions:'+question_anwer})
+    print(rep_2)
+    
+    

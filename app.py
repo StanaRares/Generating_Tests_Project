@@ -57,13 +57,7 @@ if 'end_time' not in st.session_state:
 # Streamlit app layout and logic
 if st.session_state.stage == 0:
     st.title("📝 Turn your notes into a quiz!")
-    skip_generating = st.toggle('Test sidebar')
-    if skip_generating:
-        st.session_state.skip_generating = skip_generating
-        st.write(st.session_state.skip_generating)
-        st.button("Get Started!", use_container_width=True, type='primary', on_click=set_state, args=[4])
-    else:
-        st.button("Get Started!", use_container_width=True, type='primary', on_click=set_state, args=[1])
+    st.button("Get Started!", use_container_width=True, type='primary', on_click=set_state, args=[1])
 
 elif st.session_state.stage == 1:
     st.subheader("1. Upload your file(s)", divider='red')
@@ -81,7 +75,7 @@ elif st.session_state.stage == 1:
 
         st.session_state.uploaded_files = docs
 
-        st.button("Continue", use_container_width=True, type='primary', on_click=set_custom_state, args=[3])
+        st.button("Continue", use_container_width=True, type='primary', on_click=set_custom_state, args=[2])
     else:
         st.warning("Please upload a file!")
 
@@ -120,16 +114,12 @@ elif st.session_state.stage == 3:
         You are a knowledgeable assistant specialized in creating multiple-choice quizzes for medical students studying surgery. 
         Use the provided medical information to generate quiz questions in Romanian. 
         Ensure that questions are unique, avoid repetitive formats, and adhere strictly to the specified formatting guidelines.
-        
-        Utilize the following context to create a quiz:
-
-        {context}
 
         **Quiz Requirements**:
         - Generate exactly 10 multiple-choice questions.
         - Each question should have 10 answer options: 5 correct (Adevarat) and 5 incorrect (Fals).
         - Avoid repeating question formats and ensure diversity in topics covered.
-        - Provide the source and page number for each question.
+        - Quote the paragrahps where you got the information from.
 
         **Formatting**:
         [Numar curent]\t[Întrebare, font style: bold]
@@ -146,6 +136,9 @@ elif st.session_state.stage == 3:
         [Source of the question, include page number]
 
         Ensure the output strictly follows this format without additional explanations or deviations.
+
+        Utilize the following context to create a quiz:
+        {context}
         """
 
     prompt = ChatPromptTemplate.from_messages(
